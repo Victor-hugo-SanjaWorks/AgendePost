@@ -1,0 +1,41 @@
+# Linux systemd template. Review paths and node executable before installation.
+# Exactly one process: HTTP app + optional embedded worker (disabled by default).
+[Unit]
+Description=AgendePost invite-only hosted pilot
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=agendepost
+Group=agendepost
+WorkingDirectory=/opt/agendepost/current
+EnvironmentFile=/etc/agendepost/agendepost.env
+# Verify this absolute executable with `command -v node` on the VPS.
+ExecStart=/usr/local/bin/node /opt/agendepost/current/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=180
+KillSignal=SIGTERM
+KillMode=mixed
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/agendepost
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

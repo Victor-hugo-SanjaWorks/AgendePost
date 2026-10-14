@@ -1,0 +1,76 @@
+AgendePost 0.4.0 — piloto fechado para VPS Linux Hostinger
+Verificação: 14/10/2026, UTC
+Ambiente: Linux, Node.js 24.19.0, npm 11.9.0.
+
+RESULTADOS DA FONTE CONGELADA
+- npm run check: aprovado, sintaxe JavaScript.
+- npm test: 340 testes aprovados; 0 falhas, 0 ignorados.
+  Preserva a regressão anterior (234) e acrescenta 106 testes.
+- npm run test:hosted: 33 testes aprovados, incluídos nos 340 acima.
+- npm run test:runtime: aprovado. Processo real production/hosted-pilot,
+  proxy obrigatório, cookie seguro, encerramento, persistência ao reiniciar e
+  saída com erro quando o watchdog detecta worker indisponível.
+- SHA-256 de cada arquivo distribuído: SHA256SUMS.txt. O manifesto exclui a si
+  próprio. Conferir após extrair com sha256sum -c SHA256SUMS.txt.
+- Arquivos de código, testes e documentação não mudaram durante a rodada final.
+- Migrações 001–060 anteriores preservadas byte a byte. O ZIP 0.3 não foi alterado.
+
+FLUXOS VERIFICADOS
+- Dashboard por marca, links explícitos de leitura, hash de token, expiração,
+  revogação, escopo tenant/marca e criador, redaction, rate limit e leitura sem
+  aquisição de credenciais ou chamadas a provedores.
+- Interface DOM/HTTP real: seleção de marca, criação/copiar/revogar, atualização,
+  erros/stale/null, resposta atrasada, troca de contexto, histórico/BFCache.
+- Coleta Meta opt-in, snapshots, permissões e titularidade, leases/backoff,
+  timeout, concorrência/revogação e uma página limitada de posts da conta.
+- Aprovação: arte/legenda/destinos/instante exatos; GET não decide; POST com
+  CSRF/challenge; replay e decisão concorrente; revisão invalidada; fila atômica
+  condicionada à aprovação interna e todos os requisitos; execução no worker
+  offline; publicação/resultado incerto nunca rotulados como cancelamento.
+- WhatsApp opcional: payload de template oficial, escopo/consentimento explícito,
+  configuração privada, idempotência, timeout/resultado incerto e sem reenvio.
+  Aceitação pelo provedor não é entrega. Todos os transportes foram sintéticos.
+- Upgrade offline 0.3: preserva tenants/conteúdo/blobs/credenciais cifradas de
+  teste; migração repetível, falha atômica, downgrade recusado.
+- Restore isolado revoga links/sessões/conexões, desativa coleta e congela filas;
+  tentativas WhatsApp em voo tornam-se desconhecidas. Origem preservada.
+
+LIMITES REAIS
+- Nenhuma VPS, DNS, conta ou credencial externa foi alterada. Nenhum link para
+  dados reais, mensagem WhatsApp ou publicação social real foi gerado.
+- Meta e WhatsApp foram exercitados com respostas sintéticas; não há prova de
+  concessão real, aprovação de aplicativo/template ou compatibilidade da conta.
+- Métricas: seguidores/contadores básicos disponíveis; até 25 posts retornados
+  na primeira página da conta mais histórico local identificado. Não é todo o
+  histórico, nem garantia dos 25 globalmente mais recentes. Coleta mínima de
+  15 minutos e consulta visual a cada 60 segundos; não é tempo real.
+- LinkedIn, alcance/impressões e insights avançados não estão integrados.
+- Publicação Meta exige JPEG exato em URL HTTPS temporária autorizada pelo
+  operador. O aplicativo não hospeda publicamente os uploads de forma automática.
+  Aprovação fica pendente com motivo se faltar esse ou outro requisito.
+- Chromium não iniciou neste runtime; DOM não certifica layout em dispositivos
+  ou acessibilidade completa. O programador precisa fazer inspeção visual real.
+- Nginx, systemd, TLS público, reboot, carga, privacidade/LGPD, monitoramento e
+  backup externo precisam de validação no destino. Não há certificação comercial.
+- Instalação limpa npm ci precisa ser validada na VPS. O cache local offline
+  estava incompleto; testes usaram as dependências instaladas/pinadas existentes,
+  sem mudar versões. Não se declara auditoria de vulnerabilidades concluída.
+
+PACOTE SEM SEGREDOS
+Sem node_modules, banco, .env real, senha demo, token real, chave, certificado
+privado ou backup. Credenciais de teste são fixtures sintéticas explícitas.
+Integrações externas começam desativadas nos exemplos de ambiente.
+
+INÍCIO DO PROGRAMADOR
+README.md
+  docs/UPGRADE-0.4.md
+  docs/HOSTINGER-DEPLOY.md
+  docs/CLIENT-DASHBOARD.md
+  docs/CLIENT-APPROVALS.md
+  docs/SOCIAL-METRICS.md
+  docs/WHATSAPP-SETUP.md
+  docs/META-SETUP-HOSTED.md
+  docs/HOSTED-ACCEPTANCE.md
+
+Piloto controlado por convite, com operação acompanhada. Ativação de contas,
+credenciais, mídia e envios permanece com o operador, mediante autorização.

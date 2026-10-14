@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { harness } from './qa-helpers.mjs';
+import { publicationFixture } from './qa-publication-helpers.mjs';
+
+test('QA publication persistence: restart retains exact jobs and old sessions without duplicate dispatch', async t => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'qa-publication-restart-'));
+  const h = await publicationFixture(null, { dataDir });
+  let activeApp = h.app;
+  t.after(async () => { await activeApp.close(); await rm(dataDir, { recursive: true, force: true }); });
+  const post = await h.approve(await h.post());
+  const jobs = await h.scheduled(post);
+  const before = jobs.map(j => ({ id: j.id, revision: j.revision, scheduledAt: j.scheduledAt, channelId: j.channelId })).sort((a,b) => a.id.localeCompare(b.id));
+  await h.app.close();
+  const reopened = await harness(null, { dataDir, clock: h.now, publishingAdapter: h.adapter, publishingWorker: { enabled: true, autoStart: false } });
+  activeApp = reopened.app; h.app = reopened.app; h.db = reopened.db;
+  for (const identity of Object.values(h.people)) identity.client.h = reopened;
+  const after = (await h.jobs(post)).map(j => ({ id: j.id, revision: j.revision, scheduledAt: j.scheduledAt, channelId: j.channelId })).sort((a,b) => a.id.localeCompare(b.id));
+  assert.deepEqual(after, before);
+  assert.equal(h.adapter.calls.length, 0);
+  h.advance(61_000); await h.app.ctx.services.publishing.worker.tick();
+  assert.ok((await h.jobs(post)).every(j => j.status === 'published' && j.remoteId));
+  assert.equal(h.adapter.calls.length, 2);
+  await h.app.close();
+  const second = await harness(null, { dataDir, clock: h.now, publishingAdapter: h.adapter, publishingWorker: { enabled: true, autoStart: false } });
+  activeApp = second.app;
+  for (const identity of Object.values(h.people)) identity.client.h = second;
+  await second.app.ctx.services.publishing.worker.tick();
+  assert.equal(h.adapter.calls.length, 2, 'Published revision/channel rows survive restart and cannot run again');
+  assert.equal(second.db.prepare("SELECT count(*) AS n FROM publication_jobs WHERE status='published'").get().n, 2);
+  assert.equal(second.db.prepare('PRAGMA foreign_key_check').all().length, 0);
+});

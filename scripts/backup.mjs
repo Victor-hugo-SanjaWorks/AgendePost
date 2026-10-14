@@ -1,0 +1,3 @@
+import{resolve}from'node:path';import{buildConfig}from'../src/config.mjs';import{privateBackup}from'../src/backup.mjs';
+const args=process.argv.slice(2),at=args.indexOf('--output');if(at<0||!args[at+1]||!args.includes('--confirm-sensitive-backup')){console.error('Usage: npm run backup -- --output /PRIVATE/PATH/backup.sqlite --confirm-sensitive-backup\nContains every tenant, password hashes and development links. Operator only. Encryption/retention are not implemented.');process.exit(1);}
+const config=buildConfig();await privateBackup(resolve(config.dataDir,'social-saas.sqlite'),resolve(args[at+1]),{publicDir:resolve(config.root,'public')});console.log('Consistent private local backup verified. Encryption and retention remain operator responsibilities.');

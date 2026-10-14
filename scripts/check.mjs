@@ -1,0 +1,3 @@
+import {readdirSync} from 'node:fs';import {resolve} from 'node:path';import {spawnSync} from 'node:child_process';
+const root=resolve(import.meta.dirname,'..');let failed=false;
+function walk(dir){for(const entry of readdirSync(dir,{withFileTypes:true})){if(['node_modules','data','.git','artifacts'].includes(entry.name))continue;const file=resolve(dir,entry.name);if(entry.isDirectory())walk(file);else if(/\.(?:mjs|js)$/.test(entry.name)){const result=spawnSync(process.execPath,['--check',file],{stdio:'inherit'});if(result.status!==0)failed=true;}}}walk(root);if(failed)process.exitCode=1;else console.log('JavaScript syntax checks passed.');

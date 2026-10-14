@@ -1,0 +1,80 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { harness, verified, invite, route, idempotency } from './qa-helpers.mjs';
+import { domPage } from './qa-dom.mjs';
+
+async function setup(t) {
+  const h=await harness(t),owner=await verified(h,'strategy-dom-owner');
+  const tenant=await owner.client.ok('POST','/api/v1/tenants',{name:'Dashboard organization',timezone:'UTC'},idempotency());
+  const brand=await owner.client.ok('POST',`/api/v1/tenants/${tenant.id}/workspaces`,{name:'Dashboard first brand'},idempotency());
+  const page=await domPage(h,t);await page.login(owner);await page.navigate('/app/reports','.strategy-dashboard');
+  return {h,owner,tenant,brand,page};
+}
+test('strategy DOM: brand dashboard, sourced FOFA CRUD, conflicts, archive and competitor unknown values',async t=>{
+  const {h,owner,tenant,brand,page}=await setup(t);
+  assert.ok(page.text().includes('Dashboard'));assert.ok(page.$('[data-action="export"]'));
+  assert.equal(page.$('.strategy-kpi strong').textContent,'0');
+  assert.match(page.text(),/Alcance, engajamento e resultados das redes ainda não estão disponíveis/);
+  page.click('[data-strategy-action="new-entry"]');
+  const title='<img src=x onerror="window.strategyXss=true"> A hypothesis';
+  page.fill('#strategy-title',title);page.change('#strategy-quadrant','opportunity');page.fill('#strategy-description','A hypothesis to investigate.');
+  page.submit('[data-strategy-form="entry"]');page.submit('[data-strategy-form="entry"]');
+  await page.wait(()=>!page.$('[data-strategy-form="entry"]')&&page.text().includes(title),'saved hypothesis');
+  assert.equal(h.db.prepare('SELECT count(*) AS n FROM strategy_entries').get().n,1,'Double submit must create only one entry');
+  assert.equal(page.window.strategyXss,undefined);assert.equal(page.$('img[onerror]'),null);
+  page.change('#strategy-entry-filter','evidence');assert.ok(!page.text().includes(title));
+  page.change('#strategy-entry-filter','all');page.click('[data-strategy-action="edit-entry"]');await page.wait(()=>page.$('[data-strategy-form="entry"]'),'entry edit form');
+  page.change('#strategy-classification','evidence');
+  page.submit('[data-strategy-form="entry"]');
+  await page.wait(()=>page.$('.strategy-dialog .form-error')?.textContent,'evidence source validation');
+  assert.ok(page.$('[data-strategy-form="entry"]'),'Invalid evidence must preserve the form');
+  page.fill('#strategy-observedOn',new Date().toISOString().slice(0,10));page.fill('#strategy-sourceNotes','Observed by the team during the content review.');
+  page.submit('[data-strategy-form="entry"]');
+  await page.wait(()=>!page.$('[data-strategy-form="entry"]')&&page.text().includes('Evidência informada'),'saved evidence');
+  let item=h.db.prepare('SELECT * FROM strategy_entries').get();
+  page.click('[data-strategy-action="edit-entry"]');await page.wait(()=>page.$('[data-strategy-form="entry"]'),'entry edit form');page.fill('#strategy-title','My unsaved conflict copy');
+  await owner.client.ok('PATCH',route(tenant,brand,'/strategy/entries/'+item.id),{expectedVersion:item.version,title:'Newer remote version'});
+  page.submit('[data-strategy-form="entry"]');await page.wait(()=>page.$('.strategy-dialog .form-error')?.textContent.includes('Outra pessoa'),'version conflict');
+  assert.equal(page.$('#strategy-title').value,'My unsaved conflict copy');
+  page.click('[data-strategy-action="close"]');assert.ok(page.$('.strategy-discard'));
+  page.click('[data-strategy-action="keep-editing"]');assert.equal(page.$('#strategy-title').value,'My unsaved conflict copy');
+  page.click('[data-strategy-action="close"]');page.click('[data-strategy-action="discard"]');
+  await page.navigate('/app/posts','#post-search');await page.navigate('/app/reports','.strategy-dashboard');
+  page.click('[data-strategy-action="archive-entry"]');await page.wait(()=>page.$('[data-strategy-form="archive"]'),'archive form');page.submit('[data-strategy-form="archive"]');
+  await page.wait(()=>!page.$('[data-strategy-form="archive"]')&&!page.text().includes('Newer remote version'),'archive removes active item');
+  page.$('#strategy-archives').checked=true;page.$('#strategy-archives').dispatchEvent(new page.window.Event('change',{bubbles:true}));
+  await page.wait(()=>page.text().includes('Newer remote version'),'archive view');
+  page.click('[data-strategy-action="archive-entry"]');await page.wait(()=>page.$('[data-strategy-form="archive"]'),'archive form');page.submit('[data-strategy-form="archive"]');
+  await page.wait(()=>!page.$('[data-strategy-form="archive"]')&&page.$('[data-strategy-action="archive-entry"]')?.textContent.includes('Arquivar'),'restored');
+  page.click('[data-strategy-action="new-competitor"]');page.fill('#strategy-name','Real reference');page.fill('#strategy-observedOn',new Date().toISOString().slice(0,10));page.fill('#strategy-sourceNotes','Entered by team from a direct observation.');
+  page.submit('[data-strategy-form="competitor"]');await page.wait(()=>!page.$('[data-strategy-form="competitor"]')&&page.text().includes('Real reference'),'competitor created');
+  assert.ok(page.$('.strategy-comparison').textContent.includes('Não informado'));
+  page.click('[data-strategy-action="edit-competitor"]');await page.wait(()=>page.$('[data-strategy-form="competitor"]'),'competitor edit form');page.fill('#strategy-followers','0');page.fill('#strategy-postsObserved','6');page.fill('#strategy-observationDays','14');page.submit('[data-strategy-form="competitor"]');
+  await page.wait(()=>!page.$('[data-strategy-form="competitor"]')&&page.text().includes('6 posts / 14 dias'),'competitor observations saved');
+  const saved=h.db.prepare('SELECT * FROM strategy_competitors').get();assert.equal(saved.followers,0);assert.equal(saved.posts_observed,6);
+  assert.equal(page.errors.length,0);
+  assert.ok(page.requests.filter(r=>r.method==='POST'&&r.path.endsWith('/strategy/entries')).length===1);
+
+});
+
+test('strategy DOM: invalid period preserves dashboard and new navigation guards unsaved strategy',async t=>{
+  const {h,owner,tenant,brand,page}=await setup(t);
+  page.fill('#strategy-period-form [name="from"]','2026-10-20');page.fill('#strategy-period-form [name="to"]','2026-10-01');
+  page.submit('#strategy-period-form');
+  await page.wait(()=>page.$('.strategy-filter-error')?.textContent,'invalid period is visible');
+  assert.ok(page.$('.strategy-fofa'),'Period errors must not erase current dashboard');
+  page.click('[data-strategy-action="period"][data-strategy-days="90"]');
+  await page.wait(()=>page.$('[data-strategy-days="90"]')?.getAttribute('aria-pressed')==='true','valid period applied');
+  assert.equal(page.$('.strategy-filter-error').textContent,'');
+  page.click('[data-strategy-action="new-entry"]');page.fill('#strategy-title','Unsaved strategy survives navigation');
+  page.window.location.hash='/app/posts';
+  await page.wait(()=>page.$('[data-action="confirm-action"]'),'navigation discard confirmation');
+  assert.ok(page.window.location.hash.includes('/app/reports'));
+  page.click('[data-action="dialog-close"]');assert.equal(page.$('#strategy-title').value,'Unsaved strategy survives navigation');
+  page.window.location.hash='/app/posts';await page.wait(()=>page.$('[data-action="confirm-action"]'),'navigation discard confirmation again');page.click('[data-action="confirm-action"]');
+  await page.wait(()=>page.$('#post-search'),'navigation after confirmed discard');assert.equal(page.$('.strategy-dialog'),null);
+  assert.equal(h.db.prepare('SELECT count(*) AS n FROM strategy_entries').get().n,0,'Discarded draft is not saved');
+  await page.navigate('/app/reports','.strategy-dashboard');page.click('[data-strategy-action="new-entry"]');
+  page.click('[data-strategy-action="close"]');assert.equal(page.$('.strategy-dialog'),null,'Clean form cancels without extra confirmation');
+  assert.equal(page.errors.length,0);
+});
